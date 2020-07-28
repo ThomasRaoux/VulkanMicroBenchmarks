@@ -23,3 +23,4 @@ REM
 @echo on
 glslangValidator.exe -V copy_vec4.comp -o copy_vec4.spv
 glslangValidator.exe -V copy_scalar_4.comp -o copy_scalar_4.spv
+glslangValidator.exe -V copy_scalar_1.comp -o copy_scalar_1.spv

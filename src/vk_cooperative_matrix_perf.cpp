@@ -451,14 +451,24 @@ int main(int argc, char *argv[])
     VkCommandBuffer commandBuffers[3];
     result = vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers);
     CHECK_RESULT(result);
-    for(int i =0; i < 2; i++)
+    for(int ver =0; ver < 3; ver++)
     {
     {
+        unsigned int elPerThread = 4;
         std::string fileName;
-        if(i == 0)
+        if (ver == 0) {
+            elPerThread = 4;
             fileName = "shaders/copy_vec4.spv";
-        else
+        }
+        else if (ver == 1) {
+            elPerThread = 4;
             fileName = "shaders/copy_scalar_4.spv";
+        }
+        else if (ver == 2) {
+            elPerThread = 1;
+            fileName = "shaders/copy_scalar_1.spv";
+        }
+
 
         printf("\nshader: %s\n", fileName.c_str());
 
@@ -773,7 +783,7 @@ int main(int argc, char *argv[])
 
             for (uint32_t i = 0; i < repeatCount; ++i) {
               //  vkCmdDispatch(commandBuffers[1], testCase.N / testCase.TILE_N, testCase.M / testCase.TILE_M, 1);
-                vkCmdDispatch(commandBuffers[1], (testCase.M/32)/4, testCase.N, 1);
+                vkCmdDispatch(commandBuffers[1], (testCase.M/32)/elPerThread, testCase.N, 1);
             }
 
             result = vkEndCommandBuffer(commandBuffers[1]);
@@ -829,7 +839,7 @@ int main(int argc, char *argv[])
 
 
 
-                // hack
+                // hack verify copy
                 for (uint32_t i = 0; i < testCase.M; ++i)
                 {
                     for (uint32_t j = 0; j < testCase.N; ++j)
