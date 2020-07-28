@@ -795,7 +795,9 @@ int main(int argc, char *argv[])
                 MatrixDesc& src = matrices[0];
                 MatrixDesc& dst = matrices[3];
                 VkBufferCopy copy = { 0, 0, src.bufferSize };
-                vkCmdCopyBuffer(commandBuffers[1], src.deviceBuffer, dst.deviceBuffer, 1, &copy);
+                for (uint32_t i = 0; i < repeatCount; ++i) {
+                    vkCmdCopyBuffer(commandBuffers[1], src.deviceBuffer, dst.deviceBuffer, 1, &copy);
+                }
             }
             else {
                 vkCmdBindDescriptorSets(commandBuffers[1], VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0u, 1, &descriptorSet, 0u, NULL);
