@@ -790,7 +790,7 @@ int main(int argc, char *argv[])
             result = vkBeginCommandBuffer(commandBuffers[1], &commandBufferBeginInfo);
             CHECK_RESULT(result);
             //uint32_t repeatCount = correctness ? 1 : 10;
-            uint32_t repeatCount = 10;
+            uint32_t repeatCount = 1;
             if (ver == 5) {
                 MatrixDesc& src = matrices[0];
                 MatrixDesc& dst = matrices[3];
