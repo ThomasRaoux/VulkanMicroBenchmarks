@@ -451,7 +451,7 @@ int main(int argc, char *argv[])
     VkCommandBuffer commandBuffers[3];
     result = vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers);
     CHECK_RESULT(result);
-    for(int ver =0; ver < 3; ver++)
+    for(int ver =0; ver < 5; ver++)
     {
     {
         unsigned int elPerThread = 4;
@@ -467,6 +467,14 @@ int main(int argc, char *argv[])
         else if (ver == 2) {
             elPerThread = 1;
             fileName = "shaders/copy_scalar_1.spv";
+        }
+        else if (ver == 3) {
+            elPerThread = 2;
+            fileName = "shaders/copy_vec2.spv";
+        }
+        else if (ver == 4) {
+            elPerThread = 8;
+            fileName = "shaders/copy_vec4_2.spv";
         }
 
 

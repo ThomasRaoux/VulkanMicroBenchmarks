@@ -24,3 +24,5 @@ REM
 glslangValidator.exe -V copy_vec4.comp -o copy_vec4.spv
 glslangValidator.exe -V copy_scalar_4.comp -o copy_scalar_4.spv
 glslangValidator.exe -V copy_scalar_1.comp -o copy_scalar_1.spv
+glslangValidator.exe -V copy_vec2.comp -o copy_vec2.spv
+glslangValidator.exe -V copy_vec4_2.comp -o copy_vec4_2.spv
