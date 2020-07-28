@@ -451,7 +451,7 @@ int main(int argc, char *argv[])
     VkCommandBuffer commandBuffers[3];
     result = vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers);
     CHECK_RESULT(result);
-    for(int ver =0; ver < 5; ver++)
+    for(int ver =0; ver < 6; ver++)
     {
     {
         unsigned int elPerThread = 4;
@@ -476,10 +476,17 @@ int main(int argc, char *argv[])
             elPerThread = 8;
             fileName = "shaders/copy_vec4_2.spv";
         }
+        else if (ver == 5) {
+            // dummy info
+            elPerThread = 1;
+            fileName = "shaders/copy_scalar_1.spv";
+        }
 
-
+        if (ver == 5) {
+            printf("\n hardware copy\n");
+        } else {
         printf("\nshader: %s\n", fileName.c_str());
-
+        }
         // Load and create the shader module.
         std::ifstream spirvfile(fileName.c_str(), std::ios::binary | std::ios::ate);
         std::streampos spirvsize = spirvfile.tellg();
@@ -782,18 +789,25 @@ int main(int argc, char *argv[])
             // Run the shader.
             result = vkBeginCommandBuffer(commandBuffers[1], &commandBufferBeginInfo);
             CHECK_RESULT(result);
-
-            vkCmdBindDescriptorSets(commandBuffers[1], VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0u, 1, &descriptorSet, 0u, NULL);
-            vkCmdBindPipeline(commandBuffers[1], VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-
             //uint32_t repeatCount = correctness ? 1 : 10;
-            uint32_t repeatCount =  10;
-
-            for (uint32_t i = 0; i < repeatCount; ++i) {
-              //  vkCmdDispatch(commandBuffers[1], testCase.N / testCase.TILE_N, testCase.M / testCase.TILE_M, 1);
-                vkCmdDispatch(commandBuffers[1], (testCase.M/32)/elPerThread, testCase.N, 1);
+            uint32_t repeatCount = 10;
+            if (ver == 5) {
+                MatrixDesc& src = matrices[0];
+                MatrixDesc& dst = matrices[3];
+                VkBufferCopy copy = { 0, 0, src.bufferSize };
+                vkCmdCopyBuffer(commandBuffers[1], src.deviceBuffer, dst.deviceBuffer, 1, &copy);
             }
+            else {
+                vkCmdBindDescriptorSets(commandBuffers[1], VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0u, 1, &descriptorSet, 0u, NULL);
+                vkCmdBindPipeline(commandBuffers[1], VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
+
+
+                for (uint32_t i = 0; i < repeatCount; ++i) {
+                    //  vkCmdDispatch(commandBuffers[1], testCase.N / testCase.TILE_N, testCase.M / testCase.TILE_M, 1);
+                    vkCmdDispatch(commandBuffers[1], (testCase.M / 32) / elPerThread, testCase.N, 1);
+                }
+            }
             result = vkEndCommandBuffer(commandBuffers[1]);
             CHECK_RESULT(result);
 
