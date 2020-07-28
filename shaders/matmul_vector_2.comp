@@ -1,0 +1,128 @@
+#version 450 core
+#pragma use_vulkan_memory_model
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_buffer_reference : enable
+#extension GL_KHR_shader_subgroup_ballot : enable
+#extension GL_EXT_control_flow_attributes : enable
+
+layout(binding=0) buffer InputA { vec4 x[]; } inputA;
+layout(binding=1) buffer InputB { float x[]; } inputB;
+layout(binding=2) buffer InputC { vec4 x[]; } inputC;
+layout(binding=3) buffer Output { float x[]; } outputO;
+layout(local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
+
+// M/N/K values filled out at pipeline creation time
+layout(constant_id = 0) const uint lM = 1;
+layout(constant_id = 1) const uint lN = 1;
+layout(constant_id = 2) const uint lK = 1;
+layout(constant_id = 3) const uint TILE_M = 1;
+layout(constant_id = 4) const uint TILE_N = 1;
+layout(constant_id = 5) const uint TILE_K = 1;
+layout(constant_id = 6) const uint K = 1;
+layout(constant_id = 7) const uint strideA = 1;
+layout(constant_id = 8) const uint strideB = 1;
+layout(constant_id = 9) const uint strideC = 1;
+layout(constant_id = 10)const uint strideD = 1;
+
+const uint C_ROWS = TILE_M / lM;
+const uint C_COLS = TILE_N / lN;
+
+uint coordToOffset(uint i, uint j, uint stride)
+{
+    return (stride * i + j);
+}
+
+vec4 C[C_ROWS][C_COLS];
+
+void matmul4x8x8(inout vec4 C, vec4 A, vec4 B0, vec4 B1) {
+  C.x += B0.x * subgroupBroadcast(A.x, 0);
+  C.x += B0.y * subgroupBroadcast(A.y, 0);
+  C.x += B0.z * subgroupBroadcast(A.z, 0);
+  C.x += B0.w * subgroupBroadcast(A.w, 0);
+  C.x += B1.x * subgroupBroadcast(A.x, 1);
+  C.x += B1.y * subgroupBroadcast(A.y, 1);
+  C.x += B1.z * subgroupBroadcast(A.z, 1);
+  C.x += B1.w * subgroupBroadcast(A.w, 1);
+
+  C.y += B0.x * subgroupBroadcast(A.x, 2);
+  C.y += B0.y * subgroupBroadcast(A.y, 2);
+  C.y += B0.z * subgroupBroadcast(A.z, 2);
+  C.y += B0.w * subgroupBroadcast(A.w, 2);
+  C.y += B1.x * subgroupBroadcast(A.x, 3);
+  C.y += B1.y * subgroupBroadcast(A.y, 3);
+  C.y += B1.z * subgroupBroadcast(A.z, 3);
+  C.y += B1.w * subgroupBroadcast(A.w, 3);
+
+  C.z += B0.x * subgroupBroadcast(A.x, 4);
+  C.z += B0.y * subgroupBroadcast(A.y, 4);
+  C.z += B0.z * subgroupBroadcast(A.z, 4);
+  C.z += B0.w * subgroupBroadcast(A.w, 4);
+  C.z += B1.x * subgroupBroadcast(A.x, 5);
+  C.z += B1.y * subgroupBroadcast(A.y, 5);
+  C.z += B1.z * subgroupBroadcast(A.z, 5);
+  C.z += B1.w * subgroupBroadcast(A.w, 5);
+
+  C.w += B0.x * subgroupBroadcast(A.x, 6);
+  C.w += B0.y * subgroupBroadcast(A.y, 6);
+  C.w += B0.z * subgroupBroadcast(A.z, 6);
+  C.w += B0.w * subgroupBroadcast(A.w, 6);
+  C.w += B1.x * subgroupBroadcast(A.x, 7);
+  C.w += B1.y * subgroupBroadcast(A.y, 7);
+  C.w += B1.z * subgroupBroadcast(A.z, 7);
+  C.w += B1.w * subgroupBroadcast(A.w, 7);
+}
+
+void main()
+{
+    uvec2 tileID = uvec2(gl_WorkGroupID.xy);
+
+    // Initialize result to zero
+    [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            C[i][j] = vec4(0.f, 0.f, 0.f, 0.f);
+        }
+    }
+
+    uint laneId = gl_LocalInvocationID.x;
+    // On each iteration, load a row of cooperative matrices from matrix A,
+    // load a column of cooperative matrices from matrix B, and multiply all
+    // pairs of those matrices.
+    for (uint chunkK = 0; chunkK < K; chunkK += lK) {
+        vec4 matA[C_ROWS];
+        [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+            uint gi = TILE_M * tileID.y + lM * i +(laneId*4) /8;
+            uint gk = chunkK + (laneId*4) % 8;
+            matA[i] = inputA.x[coordToOffset(gi, gk, strideA)/4];
+        }
+        vec4 matB0;
+        vec4 matB1;
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            uint gj = TILE_N * tileID.x + lN * j + laneId;
+            uint gk = chunkK;
+            matB0.x = inputB.x[coordToOffset(gk, gj, strideB)];
+            matB0.y = inputB.x[coordToOffset(gk+1, gj, strideB)];
+            matB0.z = inputB.x[coordToOffset(gk+2, gj, strideB)];
+            matB0.w = inputB.x[coordToOffset(gk+3, gj, strideB)];
+            matB1.x = inputB.x[coordToOffset(gk+4, gj, strideB)];
+            matB1.y = inputB.x[coordToOffset(gk+5, gj, strideB)];
+            matB1.z = inputB.x[coordToOffset(gk+6, gj, strideB)];
+            matB1.w = inputB.x[coordToOffset(gk+7, gj, strideB)];
+
+            [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+              matmul4x8x8(C[i][j], matA[i], matB0, matB1);
+            }
+        }
+    }
+        
+    // Initialize result to zero
+    [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            uint gi = TILE_M * tileID.y + lM * i;
+            uint gj = TILE_N * tileID.x + lN * j + laneId;
+            outputO.x[coordToOffset(gi, gj, strideD)] = C[i][j].x;
+            outputO.x[coordToOffset(gi+1, gj, strideD)] = C[i][j].y;
+            outputO.x[coordToOffset(gi+2, gj, strideD)] = C[i][j].z;
+            outputO.x[coordToOffset(gi+3, gj, strideD)] = C[i][j].w;
+        }
+    }
+}

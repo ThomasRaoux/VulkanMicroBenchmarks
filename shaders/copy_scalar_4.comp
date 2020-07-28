@@ -1,0 +1,26 @@
+#version 450 core
+#pragma use_vulkan_memory_model
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_buffer_reference : enable
+
+layout(binding=0) buffer InputA { float x[]; } inputA;
+layout(binding=1) buffer InputB { float x[]; } inputB;
+layout(binding=2) buffer InputC { float x[]; } inputC;
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+    uint strideC = 256;
+    uint strideA = 256;
+    uint strideB = 256;
+    uint K = 256;
+    uint i = gl_GlobalInvocationID.y;
+    uint j = gl_GlobalInvocationID.x;
+    float C = inputC.x[i * strideC + j];
+    for(uint k = 0; k < K; ++k) {
+      float A = inputA[strideA * i + k];
+      float B = inputB[strideB * i + k];
+      C += A*B;
+    }    
+    inputC.x[i * strideC + j] = C;
+}
