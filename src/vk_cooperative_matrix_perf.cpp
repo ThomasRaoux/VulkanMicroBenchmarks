@@ -80,6 +80,8 @@ enum class MatrixType {
     UNKNOWN_TYPE,
 };
 
+enum { MAT_A = 0, MAT_B = 1, MAT_C = 2, MAT_D = 3, NUM_MATS = 4 };
+
 struct TestCase
 {
     MatrixType inputType;
@@ -366,25 +368,31 @@ int main(int argc, char *argv[])
     VkQueue queue;
     vkGetDeviceQueue(device, (uint32_t)queueFamilyIndex, 0, &queue);
 
-    // The shaders use one UBO to pass in all the buffer addresses
-    VkDescriptorSetLayoutBinding layoutBinding = {};
-    layoutBinding.binding = 0;
-    layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    layoutBinding.descriptorCount = 1;
-    layoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
+    VkDescriptorSetLayout descriptorSetLayout;
+    std::vector<VkDescriptorSetLayoutBinding> layoutbinding;
+    for (int i = 0; i < NUM_MATS; i++) {
+        // The shaders use one UBO to pass in all the buffer addresses
+        VkDescriptorSetLayoutBinding layoutBinding = {};
+        layoutBinding.binding = i;
+        layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        layoutBinding.descriptorCount = 1;
+        layoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        layoutbinding.push_back(layoutBinding);
+    }
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         NULL,
         0,
-        1,
-        &layoutBinding,
+        layoutbinding.size(),
+        layoutbinding.data(),
     };
 
-    VkDescriptorSetLayout descriptorSetLayout;
+    
+
+
     result = vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, NULL, &descriptorSetLayout);
     CHECK_RESULT(result);
-
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {
         VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         NULL,
@@ -394,18 +402,18 @@ int main(int argc, char *argv[])
         0,
         NULL
     };
-
+    
     VkPipelineLayout pipelineLayout;
     result = vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, NULL, &pipelineLayout);
     CHECK_RESULT(result);
 
-    VkDescriptorPoolSize poolSizes[1] = { { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 } };
+    VkDescriptorPoolSize poolSizes[NUM_MATS] = { { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 }, { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 }, { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 }, { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {
         VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         NULL,
         VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-        1,
+        NUM_MATS,
         ARRAY_LENGTH(poolSizes),
         poolSizes,
     };
@@ -589,7 +597,7 @@ int main(int argc, char *argv[])
             testCase.BRowLen = BColMajor ? testCase.TILE_K : testCase.TILE_N;
             testCase.BNumRows = BColMajor ? testCase.TILE_N : testCase.TILE_K;
 
-            enum {MAT_A = 0, MAT_B = 1, MAT_C = 2, MAT_D = 3, NUM_MATS = 4};
+
 
             MatrixDesc matrices[NUM_MATS];
 
@@ -598,83 +606,29 @@ int main(int argc, char *argv[])
             createMatrixDesc(device, memoryProperties, matrices[MAT_C], MatType, testCase.M, testCase.N);
             createMatrixDesc(device, memoryProperties, matrices[MAT_D], MatType, testCase.M, testCase.N);
 
-            // Allocate buffer to hold device addresses for the four matrices
-            VkBuffer paramBuffer;
-            VkDeviceMemory paramMemory;
-            void *paramPtr;
-
-            VkBufferCreateInfo bufferCreateInfo = {
-                VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                NULL,
-                0,
-                4*sizeof(VkDeviceAddress),
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_SHARING_MODE_EXCLUSIVE,
-                0u,
-                NULL,
-            };
-
-            result = vkCreateBuffer(device, &bufferCreateInfo, NULL, &paramBuffer);
-            CHECK_RESULT(result);
-
-            VkMemoryRequirements memReqs;
-            vkGetBufferMemoryRequirements(device, paramBuffer, &memReqs);
-
-            int32_t hostIndex = findProperties(&memoryProperties, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
-
-            VkMemoryAllocateInfo memAllocateInfo = {
-                VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                NULL,
-                memReqs.size,
-                (uint32_t)hostIndex,
-            };
-
-            result = vkAllocateMemory(device, &memAllocateInfo, NULL, &paramMemory);
-            CHECK_RESULT(result);
-
-            result = vkBindBufferMemory(device, paramBuffer, paramMemory, 0);
-            CHECK_RESULT(result);
-
-            result = vkMapMemory(device, paramMemory, 0, bufferCreateInfo.size, 0, &paramPtr);
-            CHECK_RESULT(result);
-
-            PFN_vkGetBufferDeviceAddressEXT pfn_vkGetBufferDeviceAddressEXT =
-                (PFN_vkGetBufferDeviceAddressEXT)vkGetDeviceProcAddr(device, "vkGetBufferDeviceAddressEXT");
-
+            std::vector<VkWriteDescriptorSet> writeDescSet(NUM_MATS);
+            VkDescriptorBufferInfo bufferDescriptor[4];
             for (int i = 0; i < NUM_MATS; ++i) {
-                MatrixDesc &m = matrices[i];
+                MatrixDesc& m = matrices[i];
+                bufferDescriptor[i].buffer = m.deviceBuffer;
+                bufferDescriptor[i].offset = 0;
+                bufferDescriptor[i].range = VK_WHOLE_SIZE;
 
-                VkBufferDeviceAddressInfoEXT info = {
-                    VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO_EXT,
+                writeDescSet[i] = {
+                    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                     NULL,
-                    0,
+                    descriptorSet,
+                    (uint32_t)i, // dstBinding,
+                    0, // dstArrayElement
+                    1, // descriptorCount
+                    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    NULL,
+                    &bufferDescriptor[i],
+                    NULL,
                 };
-                VkDeviceAddress *addrsInMemory = (VkDeviceAddress *)paramPtr;
-                info.buffer = m.deviceBuffer;
-                VkDeviceAddress addr = pfn_vkGetBufferDeviceAddressEXT(device, &info);
-                addrsInMemory[i] = addr;
             }
-
-            VkDescriptorBufferInfo bufferDescriptor;
-            bufferDescriptor.buffer = paramBuffer;
-            bufferDescriptor.offset = 0;
-            bufferDescriptor.range = bufferCreateInfo.size;
-
-            VkWriteDescriptorSet writeDescriptorset = {
-                VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                NULL,
-                descriptorSet,
-                0, // dstBinding,
-                0, // dstArrayElement
-                1, // descriptorCount
-                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                NULL,
-                &bufferDescriptor,
-                NULL,
-            };
-
-            vkUpdateDescriptorSets(device, 1, &writeDescriptorset, 0, NULL);
-
+            vkUpdateDescriptorSets(device, writeDescSet.size(), writeDescSet.data(), 0, NULL);
+            
             // Initialize input buffers to random values. These are relatively
             // small and have few mantissa bits set so we don't lose precision
             // in fp16 mode when running the correctness test.
@@ -837,8 +791,9 @@ int main(int argc, char *argv[])
             // Upload the result from device memory.
             result = vkBeginCommandBuffer(commandBuffers[2], &commandBufferBeginInfo);
             CHECK_RESULT(result);
+            for(int i =0; i < 4; i++)
             {
-                MatrixDesc &m = matrices[MAT_D];
+                MatrixDesc &m = matrices[i];
                 VkBufferCopy copy = { 0, 0, m.bufferSize };
                 vkCmdCopyBuffer(commandBuffers[2], m.deviceBuffer, m.hostBuffer, 1, &copy);
             }
