@@ -1,0 +1,45 @@
+/*
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+#version 450 core
+#pragma use_vulkan_memory_model
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_buffer_reference : enable
+
+layout(buffer_reference) buffer InputA { vec4 x[]; } inputA;
+layout(buffer_reference) buffer InputB { vec4 x[]; } inputB;
+layout(buffer_reference) buffer InputC { vec4 x[]; } inputC;
+layout(buffer_reference) buffer Output { vec4 x[]; } outputO;
+layout(set=0, binding=0, std430) uniform Params { InputA inputA; InputB inputB; InputC inputC; Output outputO; } params;
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+    InputA inputA = params.inputA;
+    Output outputO = params.outputO;
+
+    uint id = gl_GlobalInvocationID.x+gl_GlobalInvocationID.y*(4096/4);
+  /*  outputO.x[id*4] = inputA.x[id*4];
+    outputO.x[id*4+1] = inputA.x[id*4+1];
+    outputO.x[id*4+2] = inputA.x[id*4+2];
+    outputO.x[id*4+3] = inputA.x[id*4+3];*/
+    outputO.x[id] = inputA.x[id];
+}
