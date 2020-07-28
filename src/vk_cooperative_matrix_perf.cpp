@@ -233,7 +233,7 @@ int main(int argc, char *argv[])
 {
     bool correctness = true;
 
-    printf("usage: vk_cooperative_matrix_perf.exe [--correctness]\n\n");
+   // printf("usage: vk_cooperative_matrix_perf.exe [--correctness]\n\n");
 
     for (int arg = 1; arg < argc; ++arg) {
         if (strcmp(argv[arg], "--correctness") == 0) {
@@ -451,10 +451,14 @@ int main(int argc, char *argv[])
     VkCommandBuffer commandBuffers[3];
     result = vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers);
     CHECK_RESULT(result);
-
+    for(int i =0; i < 2; i++)
     {
     {
-        std::string fileName = "shaders/tiledfp.spv";
+        std::string fileName;
+        if(i == 0)
+            fileName = "shaders/copy_vec4.spv";
+        else
+            fileName = "shaders/copy_scalar_4.spv";
 
         printf("\nshader: %s\n", fileName.c_str());
 
@@ -488,7 +492,7 @@ int main(int argc, char *argv[])
 
         MatrixType MatType = MatrixType::FLOAT_TYPE;
 
-        printf("\ncooperativeMatrixProps = %dx%dx%d   A = %s B = %s C = %s D = %s\n",
+        /*printf("\ncooperativeMatrixProps = %dx%dx%d   A = %s B = %s C = %s D = %s\n",
                 MSize,
                 NSize,
                 KSize,
@@ -496,7 +500,7 @@ int main(int argc, char *argv[])
                 componentTypeInfo[(int)MatType].typeName,
                 componentTypeInfo[(int)MatType].typeName,
                 componentTypeInfo[(int)MatType].typeName);
-
+                */
         // For performance, test a 4096x4096x4096 multiply. For correctness,
         // test 256x256x256 (because the CPU reference computation is so slow).
        // uint32_t defaultDim = correctness ? 256 : 4096;
@@ -518,9 +522,11 @@ int main(int argc, char *argv[])
         bool BColMajor = false;
         SubTestParams* params = &subTestParams;
 
-        for (unsigned int TILE_M_size = params->granularityTILE_M; TILE_M_size <= params->maxTILE_M; TILE_M_size *= 2) {
+        //for (unsigned int TILE_M_size = params->granularityTILE_M; TILE_M_size <= params->maxTILE_M; TILE_M_size *= 2) {
+        unsigned int TILE_M_size = params->granularityTILE_M; {
         double maxPerfThisIter = 0;
-        for (unsigned int TILE_N_size = params->granularityTILE_N; TILE_N_size <= params->maxTILE_N; TILE_N_size *= 2) {
+        //for (unsigned int TILE_N_size = params->granularityTILE_N; TILE_N_size <= params->maxTILE_N; TILE_N_size *= 2) {
+        unsigned int TILE_N_size = params->granularityTILE_N; {
         //for (unsigned int bcolmajor = 0; bcolmajor <= 1; ++bcolmajor) {
             unsigned int bcolmajor = 0; {
 
@@ -762,7 +768,8 @@ int main(int argc, char *argv[])
             vkCmdBindDescriptorSets(commandBuffers[1], VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0u, 1, &descriptorSet, 0u, NULL);
             vkCmdBindPipeline(commandBuffers[1], VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
-            uint32_t repeatCount = correctness ? 1 : 10;
+            //uint32_t repeatCount = correctness ? 1 : 10;
+            uint32_t repeatCount =  10;
 
             for (uint32_t i = 0; i < repeatCount; ++i) {
               //  vkCmdDispatch(commandBuffers[1], testCase.N / testCase.TILE_N, testCase.M / testCase.TILE_M, 1);
@@ -786,7 +793,7 @@ int main(int argc, char *argv[])
             uint64_t flops = 2ULL * (uint64_t)testCase.M * (uint64_t)testCase.N * (uint64_t)testCase.K * (uint64_t)repeatCount;
             double tflops = (double)flops / (double)(elapsedUs / 1000000.0) / (1000.0*1000.0*1000.0*1000.0);
 
-            uint64_t buffersizeinbytes = (uint64_t)testCase.M * (uint64_t)testCase.N * sizeof(float);
+            uint64_t buffersizeinbytes = (uint64_t)testCase.M * (uint64_t)testCase.N * sizeof(float) * (uint64_t)repeatCount;
             double bandwidth = ((double)buffersizeinbytes / (double)elapsedUs)/1000.0; // in Gb/s
             // printf("TILE_M=%d TILE_N=%d, TILE_K=%d BColMajor=%d ", testCase.TILE_M, testCase.TILE_N, testCase.TILE_K, testCase.BColMajor);
            // if (1 || !correctness) {

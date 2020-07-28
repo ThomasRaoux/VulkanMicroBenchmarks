@@ -21,4 +21,5 @@ REM FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 REM DEALINGS IN THE SOFTWARE.
 REM
 @echo on
-glslangValidator.exe -V tiled.comp -o tiledfp.spv
+glslangValidator.exe -V copy_vec4.comp -o copy_vec4.spv
+glslangValidator.exe -V copy_scalar_4.comp -o copy_scalar_4.spv
