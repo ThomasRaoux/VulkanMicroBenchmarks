@@ -506,10 +506,18 @@ int main(int argc, char *argv[])
         }
         else if (0) {
             subgroupsize = 16;
+            NSize = subgroupsize;
+            KSize = subgroupsize;
             fileName = "shaders/matmul_vector_3.spv";
         }
-        else if (1) {
+        else if (0) {
             fileName = "shaders/matmul_vector_2.spv";
+        }
+        else if (1) {
+            subgroupsize = 32;
+            NSize = subgroupsize;
+            KSize = subgroupsize;
+            fileName = "shaders/matmul_vector_4.spv";
         }
         //fileName = "shaders/matmul_scalar_tiled.spv";
         if (ver == 5) {

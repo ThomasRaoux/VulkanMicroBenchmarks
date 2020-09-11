@@ -31,3 +31,4 @@ glslangValidator.exe -V matmul_scalar_tiled.comp -o matmul_scalar_tiled.spv
 glslangValidator.exe -V matmul_vector.comp -o matmul_vector.spv --target-env spirv1.3
 glslangValidator.exe -V matmul_vector_2.comp -o matmul_vector_2.spv --target-env spirv1.3
 glslangValidator.exe -V matmul_vector_3.comp -o matmul_vector_3.spv --target-env spirv1.3
+glslangValidator.exe -V matmul_vector_4.comp -o matmul_vector_4.spv --target-env spirv1.3

@@ -1,0 +1,281 @@
+/*
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+#version 450 core
+#pragma use_vulkan_memory_model
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_buffer_reference : enable
+#extension GL_KHR_shader_subgroup_ballot : enable
+#extension GL_EXT_control_flow_attributes : enable
+
+layout(binding=0) buffer InputA { vec4 x[]; } inputA;
+layout(binding=1) buffer InputB { float x[]; } inputB;
+layout(binding=2) buffer InputC { vec4 x[]; } inputC;
+layout(binding=3) buffer Output { float x[]; } outputO;
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+// M/N/K values filled out at pipeline creation time
+layout(constant_id = 0) const uint lM = 1;
+layout(constant_id = 1) const uint lN = 1;
+layout(constant_id = 2) const uint lK = 1;
+layout(constant_id = 3) const uint TILE_M = 1;
+layout(constant_id = 4) const uint TILE_N = 1;
+layout(constant_id = 5) const uint TILE_K = 1;
+layout(constant_id = 6) const uint K = 1;
+layout(constant_id = 7) const uint strideA = 1;
+layout(constant_id = 8) const uint strideB = 1;
+layout(constant_id = 9) const uint strideC = 1;
+layout(constant_id = 10)const uint strideD = 1;
+
+const uint C_ROWS = TILE_M / lM;
+const uint C_COLS = TILE_N / lN;
+
+uint coordToOffset(uint i, uint j, uint stride)
+{
+    return (stride * i + j);
+}
+
+vec4 C[C_ROWS][C_COLS];
+
+void matmul4x32x32(inout vec4 C, vec4 A, vec4 B0, vec4 B1, vec4 B2, vec4 B3, vec4 B4, vec4 B5, vec4 B6, vec4 B7) {
+  C.x += B0.x * subgroupBroadcast(A.x, 0);
+  C.x += B0.y * subgroupBroadcast(A.y, 0);
+  C.x += B0.z * subgroupBroadcast(A.z, 0);
+  C.x += B0.w * subgroupBroadcast(A.w, 0);
+  C.x += B1.x * subgroupBroadcast(A.x, 1);
+  C.x += B1.y * subgroupBroadcast(A.y, 1);
+  C.x += B1.z * subgroupBroadcast(A.z, 1);
+  C.x += B1.w * subgroupBroadcast(A.w, 1);
+  C.x += B2.x * subgroupBroadcast(A.x, 2);
+  C.x += B2.y * subgroupBroadcast(A.y, 2);
+  C.x += B2.z * subgroupBroadcast(A.z, 2);
+  C.x += B2.w * subgroupBroadcast(A.w, 2);
+  C.x += B3.x * subgroupBroadcast(A.x, 3);
+  C.x += B3.y * subgroupBroadcast(A.y, 3);
+  C.x += B3.z * subgroupBroadcast(A.z, 3);
+  C.x += B3.w * subgroupBroadcast(A.w, 3);
+
+  C.x += B4.x * subgroupBroadcast(A.x, 4);
+  C.x += B4.y * subgroupBroadcast(A.y, 4);
+  C.x += B4.z * subgroupBroadcast(A.z, 4);
+  C.x += B4.w * subgroupBroadcast(A.w, 4);
+  C.x += B5.x * subgroupBroadcast(A.x, 5);
+  C.x += B5.y * subgroupBroadcast(A.y, 5);
+  C.x += B5.z * subgroupBroadcast(A.z, 5);
+  C.x += B5.w * subgroupBroadcast(A.w, 5);
+  C.x += B6.x * subgroupBroadcast(A.x, 6);
+  C.x += B6.y * subgroupBroadcast(A.y, 6);
+  C.x += B6.z * subgroupBroadcast(A.z, 6);
+  C.x += B6.w * subgroupBroadcast(A.w, 6);
+  C.x += B7.x * subgroupBroadcast(A.x, 7);
+  C.x += B7.y * subgroupBroadcast(A.y, 7);
+  C.x += B7.z * subgroupBroadcast(A.z, 7);
+  C.x += B7.w * subgroupBroadcast(A.w, 7);
+
+  C.y += B0.x * subgroupBroadcast(A.x, 8);
+  C.y += B0.y * subgroupBroadcast(A.y, 8);
+  C.y += B0.z * subgroupBroadcast(A.z, 8);
+  C.y += B0.w * subgroupBroadcast(A.w, 8);
+  C.y += B1.x * subgroupBroadcast(A.x, 9);
+  C.y += B1.y * subgroupBroadcast(A.y, 9);
+  C.y += B1.z * subgroupBroadcast(A.z, 9);
+  C.y += B1.w * subgroupBroadcast(A.w, 9);
+  C.y += B2.x * subgroupBroadcast(A.x, 10);
+  C.y += B2.y * subgroupBroadcast(A.y, 10);
+  C.y += B2.z * subgroupBroadcast(A.z, 10);
+  C.y += B2.w * subgroupBroadcast(A.w, 10);
+  C.y += B3.x * subgroupBroadcast(A.x, 11);
+  C.y += B3.y * subgroupBroadcast(A.y, 11);
+  C.y += B3.z * subgroupBroadcast(A.z, 11);
+  C.y += B3.w * subgroupBroadcast(A.w, 11);
+
+  C.y += B4.x * subgroupBroadcast(A.x, 12);
+  C.y += B4.y * subgroupBroadcast(A.y, 12);
+  C.y += B4.z * subgroupBroadcast(A.z, 12);
+  C.y += B4.w * subgroupBroadcast(A.w, 12);
+  C.y += B5.x * subgroupBroadcast(A.x, 13);
+  C.y += B5.y * subgroupBroadcast(A.y, 13);
+  C.y += B5.z * subgroupBroadcast(A.z, 13);
+  C.y += B5.w * subgroupBroadcast(A.w, 13);
+  C.y += B6.x * subgroupBroadcast(A.x, 14);
+  C.y += B6.y * subgroupBroadcast(A.y, 14);
+  C.y += B6.z * subgroupBroadcast(A.z, 14);
+  C.y += B6.w * subgroupBroadcast(A.w, 14);
+  C.y += B7.x * subgroupBroadcast(A.x, 15);
+  C.y += B7.y * subgroupBroadcast(A.y, 15);
+  C.y += B7.z * subgroupBroadcast(A.z, 15);
+  C.y += B7.w * subgroupBroadcast(A.w, 15);
+
+  C.z += B0.x * subgroupBroadcast(A.x, 16);
+  C.z += B0.y * subgroupBroadcast(A.y, 16);
+  C.z += B0.z * subgroupBroadcast(A.z, 16);
+  C.z += B0.w * subgroupBroadcast(A.w, 16);
+  C.z += B1.x * subgroupBroadcast(A.x, 17);
+  C.z += B1.y * subgroupBroadcast(A.y, 17);
+  C.z += B1.z * subgroupBroadcast(A.z, 17);
+  C.z += B1.w * subgroupBroadcast(A.w, 17);
+  C.z += B2.x * subgroupBroadcast(A.x, 18);
+  C.z += B2.y * subgroupBroadcast(A.y, 18);
+  C.z += B2.z * subgroupBroadcast(A.z, 18);
+  C.z += B2.w * subgroupBroadcast(A.w, 18);
+  C.z += B3.x * subgroupBroadcast(A.x, 19);
+  C.z += B3.y * subgroupBroadcast(A.y, 19);
+  C.z += B3.z * subgroupBroadcast(A.z, 19);
+  C.z += B3.w * subgroupBroadcast(A.w, 19);
+
+  C.z += B4.x * subgroupBroadcast(A.x, 20);
+  C.z += B4.y * subgroupBroadcast(A.y, 20);
+  C.z += B4.z * subgroupBroadcast(A.z, 20);
+  C.z += B4.w * subgroupBroadcast(A.w, 20);
+  C.z += B5.x * subgroupBroadcast(A.x, 21);
+  C.z += B5.y * subgroupBroadcast(A.y, 21);
+  C.z += B5.z * subgroupBroadcast(A.z, 21);
+  C.z += B5.w * subgroupBroadcast(A.w, 21);
+  C.z += B6.x * subgroupBroadcast(A.x, 22);
+  C.z += B6.y * subgroupBroadcast(A.y, 22);
+  C.z += B6.z * subgroupBroadcast(A.z, 22);
+  C.z += B6.w * subgroupBroadcast(A.w, 22);
+  C.z += B7.x * subgroupBroadcast(A.x, 23);
+  C.z += B7.y * subgroupBroadcast(A.y, 23);
+  C.z += B7.z * subgroupBroadcast(A.z, 23);
+  C.z += B7.w * subgroupBroadcast(A.w, 23);
+
+  C.w += B0.x * subgroupBroadcast(A.x, 24);
+  C.w += B0.y * subgroupBroadcast(A.y, 24);
+  C.w += B0.z * subgroupBroadcast(A.z, 24);
+  C.w += B0.w * subgroupBroadcast(A.w, 24);
+  C.w += B1.x * subgroupBroadcast(A.x, 25);
+  C.w += B1.y * subgroupBroadcast(A.y, 25);
+  C.w += B1.z * subgroupBroadcast(A.z, 25);
+  C.w += B1.w * subgroupBroadcast(A.w, 25);
+  C.w += B2.x * subgroupBroadcast(A.x, 26);
+  C.w += B2.y * subgroupBroadcast(A.y, 26);
+  C.w += B2.z * subgroupBroadcast(A.z, 26);
+  C.w += B2.w * subgroupBroadcast(A.w, 26);
+  C.w += B3.x * subgroupBroadcast(A.x, 27);
+  C.w += B3.y * subgroupBroadcast(A.y, 27);
+  C.w += B3.z * subgroupBroadcast(A.z, 27);
+  C.w += B3.w * subgroupBroadcast(A.w, 27);
+
+  C.w += B4.x * subgroupBroadcast(A.x, 28);
+  C.w += B4.y * subgroupBroadcast(A.y, 28);
+  C.w += B4.z * subgroupBroadcast(A.z, 28);
+  C.w += B4.w * subgroupBroadcast(A.w, 28);
+  C.w += B5.x * subgroupBroadcast(A.x, 29);
+  C.w += B5.y * subgroupBroadcast(A.y, 29);
+  C.w += B5.z * subgroupBroadcast(A.z, 29);
+  C.w += B5.w * subgroupBroadcast(A.w, 29);
+  C.w += B6.x * subgroupBroadcast(A.x, 30);
+  C.w += B6.y * subgroupBroadcast(A.y, 30);
+  C.w += B6.z * subgroupBroadcast(A.z, 30);
+  C.w += B6.w * subgroupBroadcast(A.w, 30);
+  C.w += B7.x * subgroupBroadcast(A.x, 31);
+  C.w += B7.y * subgroupBroadcast(A.y, 31);
+  C.w += B7.z * subgroupBroadcast(A.z, 31);
+  C.w += B7.w * subgroupBroadcast(A.w, 31);
+}
+
+void main()
+{
+    uvec2 tileID = uvec2(gl_WorkGroupID.xy);
+
+    // Initialize result to zero
+    [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            C[i][j] = vec4(0.f, 0.f, 0.f, 0.f);
+        }
+    }
+    uint s = gl_SubgroupSize;
+    uint laneId = gl_LocalInvocationID.x;
+    // On each iteration, load a row of cooperative matrices from matrix A,
+    // load a column of cooperative matrices from matrix B, and multiply all
+    // pairs of those matrices.
+    for (uint chunkK = 0; chunkK < K; chunkK += lK) {
+        vec4 matA[C_ROWS];
+        [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+            uint gi = TILE_M * tileID.y + lM * i +(laneId*4) /32;
+            uint gk = chunkK + (laneId*4) % 32;
+            matA[i] = inputA.x[coordToOffset(gi, gk, strideA)/4];
+        }
+        vec4 matB0;
+        vec4 matB1;
+        vec4 matB2;
+        vec4 matB3;
+        vec4 matB4;
+        vec4 matB5;
+        vec4 matB6;
+        vec4 matB7;
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            uint gj = TILE_N * tileID.x + lN * j + laneId;
+            uint gk = chunkK;
+            matB0.x = inputB.x[coordToOffset(gk, gj, strideB)];
+            matB0.y = inputB.x[coordToOffset(gk+1, gj, strideB)];
+            matB0.z = inputB.x[coordToOffset(gk+2, gj, strideB)];
+            matB0.w = inputB.x[coordToOffset(gk+3, gj, strideB)];
+            matB1.x = inputB.x[coordToOffset(gk+4, gj, strideB)];
+            matB1.y = inputB.x[coordToOffset(gk+5, gj, strideB)];
+            matB1.z = inputB.x[coordToOffset(gk+6, gj, strideB)];
+            matB1.w = inputB.x[coordToOffset(gk+7, gj, strideB)];
+            matB2.x = inputB.x[coordToOffset(gk+8, gj, strideB)];
+            matB2.y = inputB.x[coordToOffset(gk+9, gj, strideB)];
+            matB2.z = inputB.x[coordToOffset(gk+10, gj, strideB)];
+            matB2.w = inputB.x[coordToOffset(gk+11, gj, strideB)];
+            matB3.x = inputB.x[coordToOffset(gk+12, gj, strideB)];
+            matB3.y = inputB.x[coordToOffset(gk+13, gj, strideB)];
+            matB3.z = inputB.x[coordToOffset(gk+14, gj, strideB)];
+            matB3.w = inputB.x[coordToOffset(gk+15, gj, strideB)];
+
+            matB4.x = inputB.x[coordToOffset(gk+16, gj, strideB)];
+            matB4.y = inputB.x[coordToOffset(gk+17, gj, strideB)];
+            matB4.z = inputB.x[coordToOffset(gk+18, gj, strideB)];
+            matB4.w = inputB.x[coordToOffset(gk+19, gj, strideB)];
+            matB5.x = inputB.x[coordToOffset(gk+20, gj, strideB)];
+            matB5.y = inputB.x[coordToOffset(gk+21, gj, strideB)];
+            matB5.z = inputB.x[coordToOffset(gk+22, gj, strideB)];
+            matB5.w = inputB.x[coordToOffset(gk+23, gj, strideB)];
+            matB6.x = inputB.x[coordToOffset(gk+24, gj, strideB)];
+            matB6.y = inputB.x[coordToOffset(gk+25, gj, strideB)];
+            matB6.z = inputB.x[coordToOffset(gk+26, gj, strideB)];
+            matB6.w = inputB.x[coordToOffset(gk+27, gj, strideB)];
+            matB7.x = inputB.x[coordToOffset(gk+28, gj, strideB)];
+            matB7.y = inputB.x[coordToOffset(gk+29, gj, strideB)];
+            matB7.z = inputB.x[coordToOffset(gk+30, gj, strideB)];
+            matB7.w = inputB.x[coordToOffset(gk+31, gj, strideB)];
+
+
+            [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+              matmul4x32x32(C[i][j], matA[i], matB0, matB1, matB2, matB3, matB4, matB5, matB6, matB7);
+            }
+        }
+    }
+        
+    // Initialize result to zero
+    [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            uint gi = TILE_M * tileID.y + lM * i;
+            uint gj = TILE_N * tileID.x + lN * j + laneId;
+            outputO.x[coordToOffset(gi, gj, strideD)] = C[i][j].x;
+            outputO.x[coordToOffset(gi+1, gj, strideD)] = C[i][j].y;
+            outputO.x[coordToOffset(gi+2, gj, strideD)] = C[i][j].z;
+            outputO.x[coordToOffset(gi+3, gj, strideD)] = C[i][j].w;
+        }
+    }
+}
