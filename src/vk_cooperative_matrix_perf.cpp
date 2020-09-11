@@ -34,8 +34,6 @@ using std::vector;
 
 #define ARRAY_LENGTH(x) (sizeof(x) / sizeof(x[0]))
 
-const unsigned int subgroupsize = 8;
-
 #define CHECK_RESULT(r) do {    \
     if ((r) != VK_SUCCESS) {    \
         printf("result = %d, line = %d\n", (r), __LINE__);  \
@@ -233,7 +231,7 @@ void destroyMatrixDesc(VkDevice device, MatrixDesc &m)
 
 int main(int argc, char *argv[])
 {
-    bool correctness = true;
+    bool correctness = false;
 
    // printf("usage: vk_cooperative_matrix_perf.exe [--correctness]\n\n");
 
@@ -459,9 +457,10 @@ int main(int argc, char *argv[])
     VkCommandBuffer commandBuffers[3];
     result = vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers);
     CHECK_RESULT(result);
-    for(int ver =0; ver < 6; ver++)
+   // for(int ver =0; ver < 6; ver++)
     {
     {
+            int ver = 6;
         unsigned int elPerThread = 4;
         std::string fileName;
         if (ver == 0) {
@@ -489,7 +488,30 @@ int main(int argc, char *argv[])
             elPerThread = 1;
             fileName = "shaders/copy_scalar_1.spv";
         }
+        else if (ver == 6) {
+            elPerThread = 1;
+            fileName = "shaders/matmul_scalar.spv";
+        }
 
+        unsigned int subgroupsize = 8;
+        uint32_t MSize = 4;
+        uint32_t NSize = subgroupsize;
+        uint32_t KSize = subgroupsize;
+
+        if (0) {
+            MSize = subgroupsize;
+            NSize = subgroupsize;
+            KSize = 4;
+            fileName = "shaders/matmul_vector.spv";
+        }
+        else if (0) {
+            subgroupsize = 16;
+            fileName = "shaders/matmul_vector_3.spv";
+        }
+        else if (1) {
+            fileName = "shaders/matmul_vector_2.spv";
+        }
+        //fileName = "shaders/matmul_scalar_tiled.spv";
         if (ver == 5) {
             printf("\n hardware copy\n");
         } else {
@@ -519,9 +541,7 @@ int main(int argc, char *argv[])
         result = vkCreateShaderModule(device, &shaderModuleCreateInfo, NULL, &shaderModule);
         CHECK_RESULT(result);
 
-        uint32_t MSize = subgroupsize;
-        uint32_t NSize = subgroupsize;
-        uint32_t KSize = 4;
+
 
         MatrixType MatType = MatrixType::FLOAT_TYPE;
 
@@ -536,8 +556,8 @@ int main(int argc, char *argv[])
                 */
         // For performance, test a 4096x4096x4096 multiply. For correctness,
         // test 256x256x256 (because the CPU reference computation is so slow).
-       // uint32_t defaultDim = correctness ? 256 : 4096;
-        uint32_t defaultDim = 4096;
+        uint32_t defaultDim = correctness ? 256 : 4096;
+       // uint32_t defaultDim = 256;
         uint32_t defaultM = defaultDim;
         uint32_t defaultN = defaultDim;
         uint32_t defaultK = defaultDim;
@@ -551,15 +571,16 @@ int main(int argc, char *argv[])
 
         // TT_SHARED requires a multiple of 128x128 to satisfy the assumptions
         // of its SSBO->shared memory copy code.
-        SubTestParams subTestParams = { 128, 128, subgroupsize, subgroupsize };
+        SubTestParams subTestParams = { 128, 128, MSize, NSize };
         bool BColMajor = false;
         SubTestParams* params = &subTestParams;
 
-        //for (unsigned int TILE_M_size = params->granularityTILE_M; TILE_M_size <= params->maxTILE_M; TILE_M_size *= 2) {
-        unsigned int TILE_M_size = params->granularityTILE_M; {
+        //unsigned int TILE_M_size = params->granularityTILE_M; {
         double maxPerfThisIter = 0;
-        //for (unsigned int TILE_N_size = params->granularityTILE_N; TILE_N_size <= params->maxTILE_N; TILE_N_size *= 2) {
-        unsigned int TILE_N_size = params->granularityTILE_N; {
+        for (unsigned int TILE_N_size = params->granularityTILE_N; TILE_N_size <= params->maxTILE_N; TILE_N_size += params->granularityTILE_N) {
+            for (unsigned int TILE_M_size = params->granularityTILE_M; TILE_M_size <= params->maxTILE_M; TILE_M_size += params->granularityTILE_M) {
+
+            //unsigned int TILE_N_size = params->granularityTILE_N; {
         //for (unsigned int bcolmajor = 0; bcolmajor <= 1; ++bcolmajor) {
             unsigned int bcolmajor = 0; {
 
@@ -677,15 +698,48 @@ int main(int argc, char *argv[])
                 printf("specdata[%d] = %d\n", i, specData[i]);
             }
 #endif
+            VkSpecializationMapEntry entries[] = {
+    {0, sizeof(uint32_t) * 0, sizeof(uint32_t)},
+    {1, sizeof(uint32_t) * 1, sizeof(uint32_t)},
+    {2, sizeof(uint32_t) * 2, sizeof(uint32_t)},
+    {3, sizeof(uint32_t) * 3, sizeof(uint32_t)},
+    {4, sizeof(uint32_t) * 4, sizeof(uint32_t)},
+    {5, sizeof(uint32_t) * 5, sizeof(uint32_t)},
+    {6, sizeof(uint32_t) * 6, sizeof(uint32_t)},
+    {7, sizeof(uint32_t) * 7, sizeof(uint32_t)},
+    {8, sizeof(uint32_t) * 8, sizeof(uint32_t)},
+    {9, sizeof(uint32_t) * 9, sizeof(uint32_t)},
+    {10, sizeof(uint32_t) * 10, sizeof(uint32_t)},
+    {11, sizeof(uint32_t) * 11, sizeof(uint32_t)},
+    {12, sizeof(uint32_t) * 12, sizeof(uint32_t)},
+    {13, sizeof(uint32_t) * 13, sizeof(uint32_t)},
+    {14, sizeof(uint32_t) * 14, sizeof(uint32_t)},
+    {15, sizeof(uint32_t) * 15, sizeof(uint32_t)},
+    {16, sizeof(uint32_t) * 16, sizeof(uint32_t)},
+    {17, sizeof(uint32_t) * 17, sizeof(uint32_t)},
+            };
+
+            VkSpecializationInfo specInfo =
+            {
+                ARRAY_LENGTH(specData),
+                entries,
+                sizeof(specData),
+                specData,
+            };
+
+            VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT required_size =
+            { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT };
+            required_size.requiredSubgroupSize = subgroupsize;
+            required_size.pNext = NULL;
 
             VkPipelineShaderStageCreateInfo shaderCreateInfo = {
                 VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                NULL,
+                &required_size,
                 0,
                 VK_SHADER_STAGE_COMPUTE_BIT,
                 shaderModule,
                 "main",
-                NULL,
+                &specInfo,
             };
 
             VkComputePipelineCreateInfo pipelineCreateInfo = {
@@ -760,8 +814,8 @@ int main(int argc, char *argv[])
 
 
                 for (uint32_t i = 0; i < repeatCount; ++i) {
-                    //  vkCmdDispatch(commandBuffers[1], testCase.N / testCase.TILE_N, testCase.M / testCase.TILE_M, 1);
-                    vkCmdDispatch(commandBuffers[1], (testCase.M / 32) / elPerThread, testCase.N, 1);
+                      vkCmdDispatch(commandBuffers[1], testCase.N / testCase.TILE_N, testCase.M / testCase.TILE_M, 1);
+         //           vkCmdDispatch(commandBuffers[1], (testCase.M / 32) / elPerThread, testCase.N, 1);
                 }
             }
             result = vkEndCommandBuffer(commandBuffers[1]);
@@ -783,10 +837,10 @@ int main(int argc, char *argv[])
 
             uint64_t buffersizeinbytes = (uint64_t)testCase.M * (uint64_t)testCase.N * sizeof(float) * (uint64_t)repeatCount;
             double bandwidth = ((double)buffersizeinbytes / (double)elapsedUs)/1000.0; // in Gb/s
-            // printf("TILE_M=%d TILE_N=%d, TILE_K=%d BColMajor=%d ", testCase.TILE_M, testCase.TILE_N, testCase.TILE_K, testCase.BColMajor);
-           // if (1 || !correctness) {
-           //     printf("  %f TFlops\n", tflops);
-           // }
+             printf("TILE_M=%d TILE_N=%d, TILE_K=%d BColMajor=%d ", testCase.TILE_M, testCase.TILE_N, testCase.TILE_K, testCase.BColMajor);
+            if (1 || !correctness) {
+                printf("  %f TFlops\n", tflops);
+            }
             printf("\n bandwidth = %f Gb/s \n", bandwidth);
             // Upload the result from device memory.
             result = vkBeginCommandBuffer(commandBuffers[2], &commandBufferBeginInfo);
@@ -817,19 +871,25 @@ int main(int argc, char *argv[])
                 bool pass = true;
 
 
-
-                // hack verify copy
-                for (uint32_t i = 0; i < testCase.M; ++i)
-                {
-                    for (uint32_t j = 0; j < testCase.N; ++j)
+                if (0) {
+                    // hack verify copy
+                    for (uint32_t i = 0; i < testCase.M; ++i)
                     {
-                        if (mat_a.getDataFloat(i, j, false) != mat_d.getDataFloat(i, j, false)) {
-                            pass = false;
-                            printf("error %d %d %f != %f\n", i, j, mat_a.getDataFloat(i, j, false), mat_d.getDataFloat(i, j, false));
+                        for (uint32_t j = 0; j < testCase.N; ++j)
+                        {
+                            float ref = 0;
+                            for (uint32_t k = 0; k < testCase.K; ++k)
+                            {
+                                ref += mat_a.getDataFloat(i, k, false) * mat_b.getDataFloat(k, j, false);
+                            }
+                            if (mat_a.getDataFloat(i, j, false) != mat_d.getDataFloat(i, j, false)) {
+                                pass = false;
+                                printf("error %d %d %f != %f\n", i, j, mat_a.getDataFloat(i, j, false), mat_d.getDataFloat(i, j, false));
+                            }
                         }
                     }
                 }
-                if (0) {
+                if (1) {
                     if (mat_a.isFloatType()) {
                         for (uint32_t i = 0; i < testCase.M; ++i)
                         {
@@ -838,10 +898,10 @@ int main(int argc, char *argv[])
                                 float ref = 0;
                                 for (uint32_t k = 0; k < testCase.K; ++k)
                                 {
-                                    ref += mat_a.getDataFloat(i, k, false) * mat_b.getDataFloat(k, j, testCase.BColMajor);
+                                    ref += mat_a.getDataFloat(i, k, false) * mat_b.getDataFloat(k, j, false);
                                 }
 
-                                ref = alpha * ref + beta * mat_c.getDataFloat(i, j, false);
+                               // ref = alpha * ref + beta * mat_c.getDataFloat(i, j, false);
 
                                 float Dij = mat_d.getDataFloat(i, j, false);
                                 if (ref != Dij) {

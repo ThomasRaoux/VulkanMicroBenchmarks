@@ -1,0 +1,137 @@
+/*
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+#version 450 core
+#pragma use_vulkan_memory_model
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_buffer_reference : enable
+#extension GL_KHR_shader_subgroup_ballot : enable
+#extension GL_EXT_control_flow_attributes : enable
+
+layout(binding=0) buffer InputA { vec4 x[]; } inputA;
+layout(binding=1) buffer InputB { vec4 x[]; } inputB;
+layout(binding=2) buffer InputC { vec4 x[]; } inputC;
+layout(binding=3) buffer Output { vec4 x[]; } outputO;
+layout(local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
+
+// M/N/K values filled out at pipeline creation time
+layout(constant_id = 0) const uint lM = 1;
+layout(constant_id = 1) const uint lN = 1;
+layout(constant_id = 2) const uint lK = 1;
+layout(constant_id = 3) const uint TILE_M = 1;
+layout(constant_id = 4) const uint TILE_N = 1;
+layout(constant_id = 5) const uint TILE_K = 1;
+layout(constant_id = 6) const uint K = 1;
+layout(constant_id = 7) const uint strideA = 1;
+layout(constant_id = 8) const uint strideB = 1;
+layout(constant_id = 9) const uint strideC = 1;
+layout(constant_id = 10)const uint strideD = 1;
+
+const uint C_ROWS = TILE_M / lM;
+const uint C_COLS = TILE_N / lN;
+
+uint coordToOffset(uint i, uint j, uint stride)
+{
+    return (stride * i + j);
+}
+
+vec4 C0[C_ROWS][C_COLS];
+vec4 C1[C_ROWS][C_COLS];
+
+void matmul8x8x4(inout vec4 C0, inout vec4 C1, vec4 A, vec4 B) {
+  C0.x += A.x * subgroupBroadcast(B.x, 0);
+  C0.x += A.y * subgroupBroadcast(B.x, 2);
+  C0.x += A.z * subgroupBroadcast(B.x, 4);
+  C0.x += A.w * subgroupBroadcast(B.x, 6);
+  C0.y += A.x * subgroupBroadcast(B.y, 0);
+  C0.y += A.y * subgroupBroadcast(B.y, 2);
+  C0.y += A.z * subgroupBroadcast(B.y, 4);
+  C0.y += A.w * subgroupBroadcast(B.y, 6);
+  C0.z += A.x * subgroupBroadcast(B.z, 0);
+  C0.z += A.y * subgroupBroadcast(B.z, 2);
+  C0.z += A.z * subgroupBroadcast(B.z, 4);
+  C0.z += A.w * subgroupBroadcast(B.z, 6);
+  C0.w += A.x * subgroupBroadcast(B.w, 0);
+  C0.w += A.y * subgroupBroadcast(B.w, 2);
+  C0.w += A.z * subgroupBroadcast(B.w, 4);
+  C0.w += A.w * subgroupBroadcast(B.w, 6);
+  C1.x += A.x * subgroupBroadcast(B.x, 1);
+  C1.x += A.y * subgroupBroadcast(B.x, 3);
+  C1.x += A.z * subgroupBroadcast(B.x, 5);
+  C1.x += A.w * subgroupBroadcast(B.x, 7);
+  C1.y += A.x * subgroupBroadcast(B.y, 1);
+  C1.y += A.y * subgroupBroadcast(B.y, 3);
+  C1.y += A.z * subgroupBroadcast(B.y, 5);
+  C1.y += A.w * subgroupBroadcast(B.y, 7);
+  C1.z += A.x * subgroupBroadcast(B.z, 1);
+  C1.z += A.y * subgroupBroadcast(B.z, 3);
+  C1.z += A.z * subgroupBroadcast(B.z, 5);
+  C1.z += A.w * subgroupBroadcast(B.z, 7);
+  C1.w += A.x * subgroupBroadcast(B.w, 1);
+  C1.w += A.y * subgroupBroadcast(B.w, 3);
+  C1.w += A.z * subgroupBroadcast(B.w, 5);
+  C1.w += A.w * subgroupBroadcast(B.w, 7);
+}
+
+void main()
+{
+    uvec2 tileID = uvec2(gl_WorkGroupID.xy);
+
+    // Initialize result to zero
+    [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            C0[i][j] = vec4(0.f, 0.f, 0.f, 0.f);
+            C1[i][j] = vec4(0.f, 0.f, 0.f, 0.f);
+        }
+    }
+
+    uint laneId = gl_LocalInvocationID.x;
+    // On each iteration, load a row of cooperative matrices from matrix A,
+    // load a column of cooperative matrices from matrix B, and multiply all
+    // pairs of those matrices.
+    for (uint chunkK = 0; chunkK < K; chunkK += lK) {
+        vec4 matA[C_ROWS];
+        [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+            uint gi = TILE_M * tileID.y + lM * i;
+            uint gk = chunkK;
+            matA[i] = inputA.x[(coordToOffset(gi, gk, strideA)+strideA*laneId)/4];
+        }
+        vec4 matB;
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            uint gj = TILE_N * tileID.x + lN * j;
+            uint gk = chunkK;
+            matB = inputB.x[coordToOffset(gk, gj, strideB)/4 + ((laneId*4)%8)/4 + (laneId*4)/8*strideB/4];
+            [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+                matmul8x8x4(C0[i][j], C1[i][j], matA[i], matB);
+            }
+        }
+    }
+        
+    // Initialize result to zero
+    [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            uint gi = TILE_M * tileID.y + lM * i + laneId;
+            uint gj = TILE_N * tileID.x + lN * j;
+            outputO.x[coordToOffset(gi, gj, strideD)/4] = C0[i][j];
+            outputO.x[coordToOffset(gi, gj, strideD)/4+1] = C1[i][j];
+        }
+    }
+}
