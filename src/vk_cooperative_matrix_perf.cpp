@@ -193,7 +193,7 @@ void createMatrixDesc(VkDevice device, VkPhysicalDeviceMemoryProperties &memoryP
     VkMemoryRequirements memReqs;
     vkGetBufferMemoryRequirements(device, m.hostBuffer, &memReqs);
 
-    int32_t hostIndex = findProperties(&memoryProperties, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+    int32_t hostIndex = findProperties(&memoryProperties, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     int32_t deviceIndex = findProperties(&memoryProperties, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     VkMemoryAllocateInfo memAllocateInfo = {
@@ -348,14 +348,14 @@ int main(int argc, char *argv[])
     const char *enabledDeviceExtensions[] = { VK_EXT_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME };
     VkDeviceCreateInfo deviceCreateInfo = {
         VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        &bufferDeviceAddressFeatures,
+        NULL,
         0,
         1,
         &deviceQueueCreateInfo,
         0,
         NULL,
-        1,
-        enabledDeviceExtensions,
+        0,
+        NULL,
         NULL,
     };
 
@@ -382,7 +382,7 @@ int main(int argc, char *argv[])
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         NULL,
         0,
-        layoutbinding.size(),
+        (uint32_t)layoutbinding.size(),
         layoutbinding.data(),
     };
 
@@ -504,7 +504,7 @@ int main(int argc, char *argv[])
             KSize = 4;
             fileName = "shaders/matmul_vector.spv";
         }
-        else if (0) {
+        else if (1) {
             subgroupsize = 16;
             NSize = subgroupsize;
             KSize = subgroupsize;
@@ -513,13 +513,18 @@ int main(int argc, char *argv[])
         else if (0) {
             fileName = "shaders/matmul_vector_2.spv";
         }
-        else if (1) {
+        else if (0) {
             subgroupsize = 32;
             NSize = subgroupsize;
             KSize = subgroupsize;
             fileName = "shaders/matmul_vector_4.spv";
+        } else if(0) {
+          subgroupsize = 32;
+          MSize = 8;
+          NSize = 8;
+          KSize = 4;
+          fileName = "shaders/matmul_scalar_tiled.spv";
         }
-        //fileName = "shaders/matmul_scalar_tiled.spv";
         if (ver == 5) {
             printf("\n hardware copy\n");
         } else {
@@ -564,7 +569,7 @@ int main(int argc, char *argv[])
                 */
         // For performance, test a 4096x4096x4096 multiply. For correctness,
         // test 256x256x256 (because the CPU reference computation is so slow).
-        uint32_t defaultDim = correctness ? 256 : 4096;
+        uint32_t defaultDim = correctness ? 256 : 1024;//4096;
        // uint32_t defaultDim = 256;
         uint32_t defaultM = defaultDim;
         uint32_t defaultN = defaultDim;
@@ -742,7 +747,7 @@ int main(int argc, char *argv[])
 
             VkPipelineShaderStageCreateInfo shaderCreateInfo = {
                 VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                &required_size,
+                NULL,//&required_size,
                 0,
                 VK_SHADER_STAGE_COMPUTE_BIT,
                 shaderModule,
