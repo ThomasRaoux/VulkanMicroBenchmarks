@@ -457,10 +457,10 @@ int main(int argc, char *argv[])
     VkCommandBuffer commandBuffers[3];
     result = vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers);
     CHECK_RESULT(result);
-   // for(int ver =0; ver < 6; ver++)
+    for(int ver =0; ver < 6; ver++)
     {
     {
-            int ver = 6;
+    //        int ver = 2;
         unsigned int elPerThread = 4;
         std::string fileName;
         if (ver == 0) {
@@ -492,7 +492,7 @@ int main(int argc, char *argv[])
             elPerThread = 1;
             fileName = "shaders/matmul_scalar.spv";
         }
-
+/*
         unsigned int subgroupsize = 8;
         uint32_t MSize = 4;
         uint32_t NSize = subgroupsize;
@@ -504,7 +504,7 @@ int main(int argc, char *argv[])
             KSize = 4;
             fileName = "shaders/matmul_vector.spv";
         }
-        else if (1) {
+        else if (0) {
             subgroupsize = 16;
             NSize = subgroupsize;
             KSize = subgroupsize;
@@ -518,13 +518,14 @@ int main(int argc, char *argv[])
             NSize = subgroupsize;
             KSize = subgroupsize;
             fileName = "shaders/matmul_vector_4.spv";
-        } else if(0) {
+        } else if(1) {
           subgroupsize = 32;
           MSize = 8;
           NSize = 8;
           KSize = 4;
           fileName = "shaders/matmul_scalar_tiled.spv";
         }
+        */
         if (ver == 5) {
             printf("\n hardware copy\n");
         } else {
@@ -569,7 +570,7 @@ int main(int argc, char *argv[])
                 */
         // For performance, test a 4096x4096x4096 multiply. For correctness,
         // test 256x256x256 (because the CPU reference computation is so slow).
-        uint32_t defaultDim = correctness ? 256 : 1024;//4096;
+        uint32_t defaultDim = 4096;
        // uint32_t defaultDim = 256;
         uint32_t defaultM = defaultDim;
         uint32_t defaultN = defaultDim;
@@ -584,15 +585,18 @@ int main(int argc, char *argv[])
 
         // TT_SHARED requires a multiple of 128x128 to satisfy the assumptions
         // of its SSBO->shared memory copy code.
-        SubTestParams subTestParams = { 128, 128, MSize, NSize };
+        SubTestParams subTestParams = { 128, 128, 16, 16 };
         bool BColMajor = false;
         SubTestParams* params = &subTestParams;
 
         //unsigned int TILE_M_size = params->granularityTILE_M; {
         double maxPerfThisIter = 0;
-        for (unsigned int TILE_N_size = params->granularityTILE_N; TILE_N_size <= params->maxTILE_N; TILE_N_size += params->granularityTILE_N) {
-            for (unsigned int TILE_M_size = params->granularityTILE_M; TILE_M_size <= params->maxTILE_M; TILE_M_size += params->granularityTILE_M) {
-
+   //     for (unsigned int TILE_N_size = params->granularityTILE_N; TILE_N_size <= params->maxTILE_N; TILE_N_size += params->granularityTILE_N) {
+   //         for (unsigned int TILE_M_size = params->granularityTILE_M; TILE_M_size <= params->maxTILE_M; TILE_M_size += params->granularityTILE_M) {
+        {{
+              uint32_t MSize = 16;
+        uint32_t NSize = 16;
+        uint32_t KSize = 4;
             //unsigned int TILE_N_size = params->granularityTILE_N; {
         //for (unsigned int bcolmajor = 0; bcolmajor <= 1; ++bcolmajor) {
             unsigned int bcolmajor = 0; {
@@ -612,8 +616,8 @@ int main(int argc, char *argv[])
                 KSize, // uint32_t lK;
 
                 // size of workgroup tile in destination matrix
-                TILE_M_size, // uint32_t TILE_M;
-                TILE_N_size, // uint32_t TILE_N;
+                32,//TILE_M_size, // uint32_t TILE_M;
+                32,//TILE_N_size, // uint32_t TILE_N;
                 KSize, // uint32_t TILE_K;
 
                 BColMajor, // bool BColMajor;
@@ -740,10 +744,10 @@ int main(int argc, char *argv[])
                 specData,
             };
 
-            VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT required_size =
-            { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT };
-            required_size.requiredSubgroupSize = subgroupsize;
-            required_size.pNext = NULL;
+            //VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT required_size =
+            //{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT };
+            //required_size.requiredSubgroupSize = subgroupsize;
+           //required_size.pNext = NULL;
 
             VkPipelineShaderStageCreateInfo shaderCreateInfo = {
                 VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -827,10 +831,12 @@ int main(int argc, char *argv[])
 
 
                 for (uint32_t i = 0; i < repeatCount; ++i) {
-                      vkCmdDispatch(commandBuffers[1], testCase.N / testCase.TILE_N, testCase.M / testCase.TILE_M, 1);
-         //           vkCmdDispatch(commandBuffers[1], (testCase.M / 32) / elPerThread, testCase.N, 1);
+                  printf("dispatch: %i %i %i\n", (testCase.M / 32) / elPerThread, testCase.N, 1);
+         //             vkCmdDispatch(commandBuffers[1], testCase.N / testCase.TILE_N, testCase.M / testCase.TILE_M, 1);
+                    vkCmdDispatch(commandBuffers[1], (testCase.M / 32) / elPerThread, testCase.N, 1);
                 }
             }
+            printf("dispatch end\n");
             result = vkEndCommandBuffer(commandBuffers[1]);
             CHECK_RESULT(result);
 
