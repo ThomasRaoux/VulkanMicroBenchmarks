@@ -1,0 +1,99 @@
+#version 450 core
+#pragma use_vulkan_memory_model
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_buffer_reference : enable
+#extension GL_KHR_shader_subgroup_ballot : enable
+#extension GL_EXT_control_flow_attributes : enable
+
+layout(binding=0) buffer InputA { vec4 x[]; } inputA;
+layout(binding=1) buffer InputB { vec4 x[]; } inputB;
+layout(binding=2) buffer InputC { vec4 x[]; } inputC;
+layout(binding=3) buffer Output { vec4 x[]; } outputO;
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(constant_id = 6) const uint K = 1;
+layout(constant_id = 7) const uint strideA = 1;
+layout(constant_id = 8) const uint strideB = 1;
+layout(constant_id = 9) const uint strideC = 1;
+layout(constant_id = 10)const uint strideD = 1;
+
+const uint C_ROWS = TILE_M / 8;
+const uint C_COLS = TILE_N / 32;
+
+uint coordToOffset(uint i, uint j, uint stride)
+{
+    return (stride * i + j);
+}
+    shared vec4 BC[TILE_N];
+
+void main()
+{
+    uint gID = gl_WorkGroupID.x;
+    uint laneId = gl_LocalInvocationID.x;
+    uint colId = gl_LocalInvocationID.y;
+    uvec2 tileID = uvec2(gl_GlobalInvocationID.xy);
+    vec4 C[C_ROWS][C_COLS];
+    vec4 A[C_ROWS];
+
+    // Initialize result to zero
+    [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            C[i][j] = vec4(0.f, 0.f, 0.f, 0.f);
+        }
+    }
+
+    for (uint k = 0; k < K; k+=4) {
+        [[unroll]] for (uint i = 0; i < TILE_N/64; ++i) {
+          BC[laneId + colId*8] = inputB.x[gID * (TILE_N / 4) + laneId + (colId % 2) * 8 + i * 16 + (k + colId/2) * strideB/4];
+        }
+        [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+            uint gi = tileID.y*C_ROWS+i;
+            uint gk = k/4;
+            A[i] = inputA.x[coordToOffset(gi, gk, strideA/4)];
+        }
+
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+          uint gj = laneId +j*8;
+          uint gk = 0;
+          vec4 B = BC[coordToOffset(gk, gj, TILE_N/4)];
+          [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+            C[i][j] += vec4(A[i].x, A[i].x, A[i].x, A[i].x)*B;
+          }
+        }
+
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+          uint gj = laneId +j*8;
+          uint gk = 1;
+          vec4 B = BC[coordToOffset(gk, gj, TILE_N/4)];
+          [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+            C[i][j] += vec4(A[i].y, A[i].y, A[i].y, A[i].y)*B;
+          }
+        }
+
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+          uint gj = laneId +j*8;
+          uint gk = 2;
+          vec4 B = BC[coordToOffset(gk, gj, TILE_N/4)];
+          [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+            C[i][j] += vec4(A[i].z, A[i].z, A[i].z, A[i].z)*B;
+          }
+        }
+
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+          uint gj = laneId +j*8;
+          uint gk = 3;
+          vec4 B = BC[coordToOffset(gk, gj, TILE_N/4)];
+          [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+            C[i][j] += vec4(A[i].w, A[i].w, A[i].w, A[i].w)*B;
+          }
+        }
+    }
+
+    [[unroll]] for (uint i = 0; i < C_ROWS; ++i) {
+        [[unroll]] for (uint j = 0; j < C_COLS; ++j) {
+            uint gi = tileID.y*C_ROWS+i;
+            uint gj = gID * (TILE_N / 4) + laneId +j*8;
+            outputO.x[gi * strideD/4 + gj] = C[i][j];
+        }
+    }
+}

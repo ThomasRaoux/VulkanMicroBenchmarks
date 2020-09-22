@@ -47,6 +47,11 @@ int32_t findProperties(const VkPhysicalDeviceMemoryProperties* pMemoryProperties
                        VkMemoryPropertyFlags requiredProperties) {
     const uint32_t memoryCount = pMemoryProperties->memoryTypeCount;
     for (uint32_t memoryIndex = 0; memoryIndex < memoryCount; ++memoryIndex) {
+        const VkMemoryPropertyFlags properties =
+            pMemoryProperties->memoryTypes[memoryIndex].propertyFlags;
+      //  printf(" mem type: %i\n", properties);
+    }
+    for (uint32_t memoryIndex = 0; memoryIndex < memoryCount; ++memoryIndex) {
         const uint32_t memoryTypeBits = (1 << memoryIndex);
         const bool isRequiredMemoryType = memoryTypeBitsRequirement & memoryTypeBits;
 
@@ -240,7 +245,6 @@ int main(int argc, char *argv[])
             correctness = true;
         }
     }
-
     // Initialize Vulkan
     VkApplicationInfo applicationInfo = {
         VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -457,9 +461,17 @@ int main(int argc, char *argv[])
     VkCommandBuffer commandBuffers[3];
     result = vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffers);
     CHECK_RESULT(result);
+  //  for(int X = 1; X <= 256; X*=2) {
+  //      for(int Y = 1; Y <= 128; Y*=2) {
+   //         if(X*Y > 1024)
+   //           continue;
+    //        printf("WG size: %i %i\n", X, Y);
+        for(int TILE_N_ = 64; TILE_N_ <= 1024; TILE_N_+=32) {
+                for(int TILE_M_ = 8; TILE_M_ <= 32; TILE_M_+=8) {
+   //        int TILE_N_ = 4 * X;
+   //        int TILE_M_ = 8 * Y;
    // for(int ver =0; ver < 6; ver++)
-    {
-    {
+
             int ver = 6;
         unsigned int elPerThread = 4;
         std::string fileName;
@@ -498,13 +510,19 @@ int main(int argc, char *argv[])
         uint32_t NSize = subgroupsize;
         uint32_t KSize = subgroupsize;
 
-        if (0) {
+        if(0) {
+            MSize = 64*4;
+            NSize = 1;
+            KSize = 1;
+            fileName = "shaders/flops.spv";   
+        }
+        else if (0) {
             MSize = subgroupsize;
             NSize = subgroupsize;
             KSize = 4;
             fileName = "shaders/matmul_vector.spv";
         }
-        else if (1) {
+        else if (0) {
             subgroupsize = 16;
             NSize = subgroupsize;
             KSize = subgroupsize;
@@ -518,12 +536,64 @@ int main(int argc, char *argv[])
             NSize = subgroupsize;
             KSize = subgroupsize;
             fileName = "shaders/matmul_vector_4.spv";
-        } else if(0) {
+        }  else if (0) {
+            subgroupsize = 64;
+            MSize = 4*8;
+            NSize = subgroupsize;
+            KSize = subgroupsize;
+            fileName = "shaders/matmul_vector_5.spv";
+        }
+        else if(0) {
           subgroupsize = 32;
           MSize = 8;
           NSize = 8;
           KSize = 4;
-          fileName = "shaders/matmul_scalar_tiled.spv";
+          fileName = "shaders/matmul_scalar_tiled" + 
+          std::to_string(TILE_M_) + "-" + std::to_string(TILE_N_) + ".spv";
+        }
+        else if (0)
+        {
+            subgroupsize = 32;
+            MSize = 1;
+            NSize = 1;
+            KSize = 1;
+          //  fileName = "shaders/matmul_4x8block" +
+          //  std::to_string(X) + "-" + std::to_string(Y) + ".spv";
+        }
+        else if (1)
+        {
+            subgroupsize = 32;
+            MSize = 8;
+            NSize = 32;
+            KSize = 4;
+            fileName = "shaders/matmul_4x8" + 
+          std::to_string(TILE_M_) + "-" + std::to_string(TILE_N_) + ".spv";
+        }
+        else if (1)
+        {
+            subgroupsize = 32;
+            MSize = 8;
+            NSize = 32;
+            KSize = 4;
+            fileName = "shaders/matmul_4x8x4" + 
+          std::to_string(TILE_M_) + "-" + std::to_string(TILE_N_) + ".spv";
+        }
+        else if (1)
+        {
+            subgroupsize = 32;
+            MSize = 8;
+            NSize = 32;
+            KSize = 4;
+            fileName = "shaders/matmul_4x8x4_slm" + 
+          std::to_string(TILE_M_) + "-" + std::to_string(TILE_N_) + ".spv";
+        }
+        else if (0)
+        {
+            subgroupsize = 32;
+            MSize = 8;
+            NSize = 32;
+            KSize = 4;
+            fileName = "shaders/matmul_4x8_unrolled.spv";
         }
         if (ver == 5) {
             printf("\n hardware copy\n");
@@ -569,7 +639,7 @@ int main(int argc, char *argv[])
                 */
         // For performance, test a 4096x4096x4096 multiply. For correctness,
         // test 256x256x256 (because the CPU reference computation is so slow).
-        uint32_t defaultDim = correctness ? 256 : 1024;//4096;
+        uint32_t defaultDim = 1024;//correctness ? 256 : 1024;//4096;
        // uint32_t defaultDim = 256;
         uint32_t defaultM = defaultDim;
         uint32_t defaultN = defaultDim;
@@ -584,7 +654,7 @@ int main(int argc, char *argv[])
 
         // TT_SHARED requires a multiple of 128x128 to satisfy the assumptions
         // of its SSBO->shared memory copy code.
-        SubTestParams subTestParams = { 128, 128, MSize, NSize };
+        SubTestParams subTestParams = { 1024, 1024, MSize, NSize };
         bool BColMajor = false;
         SubTestParams* params = &subTestParams;
 
@@ -593,6 +663,10 @@ int main(int argc, char *argv[])
         for (unsigned int TILE_N_size = params->granularityTILE_N; TILE_N_size <= params->maxTILE_N; TILE_N_size += params->granularityTILE_N) {
             for (unsigned int TILE_M_size = params->granularityTILE_M; TILE_M_size <= params->maxTILE_M; TILE_M_size += params->granularityTILE_M) {
 
+                if(TILE_M_size!=TILE_M_ || TILE_N_size!=TILE_N_)
+                  continue;
+                //if(TILE_M_size!=4*8 || TILE_N_size!= 64)
+                 //continue;
             //unsigned int TILE_N_size = params->granularityTILE_N; {
         //for (unsigned int bcolmajor = 0; bcolmajor <= 1; ++bcolmajor) {
             unsigned int bcolmajor = 0; {
@@ -810,8 +884,8 @@ int main(int argc, char *argv[])
             // Run the shader.
             result = vkBeginCommandBuffer(commandBuffers[1], &commandBufferBeginInfo);
             CHECK_RESULT(result);
-            //uint32_t repeatCount = correctness ? 1 : 10;
-            uint32_t repeatCount = 1;
+            uint32_t repeatCount = correctness ? 1 : 10;
+            //uint32_t repeatCount = 1;
             if (ver == 5) {
                 MatrixDesc& src = matrices[0];
                 MatrixDesc& dst = matrices[3];
@@ -828,7 +902,7 @@ int main(int argc, char *argv[])
 
                 for (uint32_t i = 0; i < repeatCount; ++i) {
                       vkCmdDispatch(commandBuffers[1], testCase.N / testCase.TILE_N, testCase.M / testCase.TILE_M, 1);
-         //           vkCmdDispatch(commandBuffers[1], (testCase.M / 32) / elPerThread, testCase.N, 1);
+               //     vkCmdDispatch(commandBuffers[1], (testCase.M / 8)/4, (testCase.N/8)/8, 1);
                 }
             }
             result = vkEndCommandBuffer(commandBuffers[1]);
@@ -852,7 +926,7 @@ int main(int argc, char *argv[])
             double bandwidth = ((double)buffersizeinbytes / (double)elapsedUs)/1000.0; // in Gb/s
              printf("TILE_M=%d TILE_N=%d, TILE_K=%d BColMajor=%d ", testCase.TILE_M, testCase.TILE_N, testCase.TILE_K, testCase.BColMajor);
             if (1 || !correctness) {
-                printf("  %f TFlops\n", tflops);
+                printf("  %f TFlops time %lu us\n", tflops, elapsedUs);
             }
             printf("\n bandwidth = %f Gb/s \n", bandwidth);
             // Upload the result from device memory.
@@ -948,7 +1022,6 @@ int main(int argc, char *argv[])
                 }
                 printf("\n%s\n", pass ? "pass" : "fail");
             }
-
             // Free the memory/buffers/pipeline for this iteration.
             for (int i = 0; i < NUM_MATS; ++i) {
                 destroyMatrixDesc(device, matrices[i]);
@@ -964,10 +1037,10 @@ int main(int argc, char *argv[])
         } // TILE_M_size
 
         vkDestroyShaderModule(device, shaderModule, NULL);
+
     } // numCooperativeMatrixProperties
     } // TT_COUNT
 
     printf("\ndone\n");
-
     return 0;
 }
